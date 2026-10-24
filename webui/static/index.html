@@ -1,0 +1,1649 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>51 在线调试台</title>
+<style>
+:root{
+  --ui:system-ui,"Segoe UI Variable Text","Microsoft YaHei UI","PingFang SC",sans-serif;
+  --mono:"Cascadia Mono","JetBrains Mono",Consolas,"Courier New",monospace;
+  --r:12px;
+}
+:root[data-theme="dark"]{
+  --bg:#0f1420; --bg-soft:#141a28; --panel:#171e2d; --panel-2:#1d2536; --panel-3:#232d40;
+  --line:#28324a; --line-soft:#20293c; --text:#dde5f2; --muted:#93a2ba; --dim:#6a7893;
+  --accent:#6e8bff; --accent-2:#35d6b2; --ok:#3fd18f; --warn:#f0b263; --danger:#ff7070;
+  --shadow:0 14px 34px rgba(5,8,16,.45); --glow:0 0 0 1px rgba(110,139,255,.28);
+}
+:root[data-theme="light"]{
+  --bg:#eef1f7; --bg-soft:#e6eaf3; --panel:#ffffff; --panel-2:#f5f7fc; --panel-3:#eceff6;
+  --line:#d6dbe8; --line-soft:#e4e8f1; --text:#1d2433; --muted:#5c6675; --dim:#8b94a5;
+  --accent:#3f5fe0; --accent-2:#0f9d78; --ok:#0f8f5b; --warn:#b6741a; --danger:#cf3b3b;
+  --shadow:0 12px 28px rgba(28,38,66,.10); --glow:0 0 0 1px rgba(63,95,224,.25);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font:13px/1.55 var(--ui);color:var(--text);background:var(--bg);overflow:hidden;
+  display:flex;flex-direction:column}
+body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:radial-gradient(900px 420px at 12% -12%,rgba(110,139,255,.13),transparent 62%),
+             radial-gradient(780px 400px at 92% -6%,rgba(53,214,178,.10),transparent 66%)}
+button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:var(--panel-3);border-radius:6px;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:var(--line);background-clip:padding-box}
+::-webkit-scrollbar-track{background:transparent}
+.mono{font-family:var(--mono)}
+.muted{color:var(--muted)}
+.dim{color:var(--dim)}
+
+/* ---------- topbar ---------- */
+/* 装不下就换行，绝不把某一组压到比自己的内容还窄（压窄了子元素会溢出到隔壁组上面，就是之前那堆重叠） */
+.topbar{position:relative;z-index:5;flex:0 0 auto;min-height:62px;display:flex;flex-wrap:wrap;align-items:center;
+  gap:8px 14px;padding:8px 16px;
+  background:linear-gradient(180deg,var(--bg-soft),rgba(20,26,40,.72));border-bottom:1px solid var(--line);
+  backdrop-filter:blur(10px)}
+:root[data-theme="light"] .topbar{background:linear-gradient(180deg,#fff,#f7f9fd)}
+.brand{display:flex;align-items:center;gap:10px;flex:0 0 auto}
+.mark{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font:700 13px/1 var(--mono);color:#fff;
+  background:linear-gradient(135deg,var(--accent),#8f6bff 55%,var(--accent-2));box-shadow:var(--shadow)}
+.brand b{font-size:14px;letter-spacing:.2px;display:block}
+.brand small{color:var(--dim);font-size:11px;display:block;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 组内也要能换行：窄到一组比视口还宽时（串口那组约 442px），不换行就会把按钮顶出视口。
+   允许收缩不会退回以前那种重叠——子项现在会折行，压窄只会变高。 */
+.bar-group{display:flex;align-items:center;gap:8px;flex:0 1 auto;flex-wrap:wrap}
+.bar-group.grow{flex:1 1 auto}
+.spacer{flex:1 1 auto}
+select.inp,input.inp{background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:7px 10px;outline:none;transition:.15s}
+select.inp:hover,input.inp:hover{border-color:var(--dim)}
+select.inp:focus,input.inp:focus{border-color:var(--accent);box-shadow:var(--glow)}
+select.inp{max-width:280px;text-overflow:ellipsis}
+.btn{border:1px solid var(--line);background:var(--panel-2);border-radius:9px;padding:7px 13px;cursor:pointer;
+  transition:.15s;white-space:nowrap;display:inline-flex;align-items:center;gap:7px}
+.btn:hover:not(:disabled){background:var(--panel-3);border-color:var(--dim);transform:translateY(-1px)}
+.btn:active:not(:disabled){transform:translateY(0)}
+.btn:disabled{opacity:.42;cursor:not-allowed}
+.btn.primary{background:linear-gradient(135deg,var(--accent),#5f7cf0);border-color:transparent;color:#fff;font-weight:600;
+  box-shadow:0 6px 16px rgba(79,110,240,.28)}
+.btn.flash{background:linear-gradient(135deg,#f0913f,#e8604c);border-color:transparent;color:#fff;font-weight:600;
+  box-shadow:0 6px 16px rgba(232,96,76,.26)}
+.btn.ghost{background:transparent}
+.btn.danger{color:var(--danger);border-color:rgba(255,112,112,.4)}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;border:1px solid var(--line);
+  background:var(--panel-2);font-size:11.5px;color:var(--muted);white-space:nowrap}
+.badge.ok{color:var(--ok);border-color:rgba(63,209,143,.42);background:rgba(63,209,143,.10)}
+.badge.bad{color:var(--danger);border-color:rgba(255,112,112,.42);background:rgba(255,112,112,.10)}
+.badge.warn{color:var(--warn);border-color:rgba(240,178,99,.42);background:rgba(240,178,99,.10)}
+.light{width:9px;height:9px;border-radius:50%;background:var(--dim);box-shadow:0 0 0 3px rgba(106,120,147,.16)}
+.light.on{background:var(--ok);box-shadow:0 0 0 3px rgba(63,209,143,.20);animation:pulse 2.2s infinite}
+.light.busy{background:var(--warn);box-shadow:0 0 0 3px rgba(240,178,99,.20);animation:pulse 1s infinite}
+.light.off{background:var(--danger);box-shadow:0 0 0 3px rgba(255,112,112,.18)}
+@keyframes pulse{50%{opacity:.42}}
+
+/* ---------- layout ---------- */
+/* 顶栏高度现在会随换行变化，所以工作区吃剩余空间而不是减固定的 62px */
+.workspace{position:relative;z-index:1;display:flex;gap:12px;padding:12px;flex:1 1 auto;min-height:0}
+/* 两侧栏宽走 CSS 变量：拖分割条只改变量，中间那栏自己让位 */
+#colL{flex:0 0 var(--w-left,302px);min-width:0}
+#colC{flex:1 1 auto;min-width:0}
+#colR{flex:0 0 var(--w-right,358px);min-width:0}
+.col{display:flex;flex-direction:column;gap:12px;min-height:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);display:flex;flex-direction:column;
+  min-height:0;box-shadow:var(--shadow);overflow:hidden}
+.card>.chead{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line-soft);
+  background:linear-gradient(180deg,var(--panel-2),transparent)}
+/* 卡片标题多是中文，1.4px 字距 + uppercase 是给英文小标签定的，用在中文上只会散架 */
+.chead .ttl{font-size:11px;letter-spacing:.5px;color:var(--dim);font-weight:700}
+.chead .tools{margin-left:auto;display:flex;align-items:center;gap:6px}
+.cbody{padding:10px 12px;overflow:auto;min-height:0}
+.cbody.flush{padding:0}
+/* 每栏只有一块是「吃剩余」的填充块，其余靠显式高度；两条分割条分别在左右两栏里 */
+.vsplit{flex:0 0 auto;height:9px;margin:-6px 0;cursor:row-resize;border-radius:5px;position:relative;z-index:2}
+.vsplit::after{content:"";position:absolute;left:26%;right:26%;top:50%;height:3px;margin-top:-1.5px;border-radius:2px;
+  background:var(--line);transition:.15s}
+.vsplit:hover::after,.vsplit.drag::after{background:var(--accent);left:12%;right:12%}
+.hsplit{flex:0 0 9px;margin:0 -6px;cursor:col-resize;border-radius:5px;position:relative;z-index:2}
+.hsplit::after{content:"";position:absolute;top:26%;bottom:26%;left:50%;width:3px;margin-left:-1.5px;border-radius:2px;
+  background:var(--line);transition:.15s}
+.hsplit:hover::after,.hsplit.drag::after{background:var(--accent);top:12%;bottom:12%}
+body.dragging{cursor:row-resize;user-select:none}
+body.dragging-x{cursor:col-resize;user-select:none}
+#cardFiles{min-height:210px}
+#cardFiles .cbody{flex:1 1 auto}
+/* 默认就给文件列表留一半以上：元信息卡最高占列高 45%，超出部分自己滚 */
+#cardMeta{max-height:45%}
+/* 曲线卡整体高度是唯一可调项，画布跟着卡片伸缩（不是写死 236 再把空白留在下面） */
+#cardCurve{flex:0 0 auto;height:300px}
+.curve-wrap{flex:1 1 auto;min-height:140px}
+#cardTerm{min-height:170px}
+#cardDiag{min-height:150px}
+#cardDiag .cbody{flex:1 1 auto}
+#cardSys{flex:0 0 auto;height:208px;min-height:120px}
+#cardSys .syslog{flex:1 1 auto}
+#cardTerm .term{flex:1 1 auto}
+.kv dd.path{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini{padding:4px 9px;border-radius:7px;border:1px solid var(--line);background:var(--panel-2);cursor:pointer;font-size:11.5px;transition:.15s;white-space:nowrap}
+.mini:hover{background:var(--panel-3);border-color:var(--dim)}
+.mini.act{color:#fff;background:var(--accent);border-color:transparent}
+.kv{display:grid;grid-template-columns:74px minmax(0,1fr);gap:5px 9px;align-items:baseline}
+.kv dt{color:var(--dim);font-size:11.5px}
+.kv dd{margin:0;font-family:var(--mono);font-size:11.8px;word-break:break-all;color:var(--text)}
+.sub{display:flex;align-items:center;gap:8px;margin:12px 0 6px;font-size:11px;letter-spacing:1.2px;color:var(--dim);text-transform:uppercase}
+.sub::after{content:"";flex:1;height:1px;background:var(--line-soft)}
+.list{display:flex;flex-direction:column;gap:3px}
+.row{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:8px;cursor:pointer;border:1px solid transparent;background:transparent;text-align:left;width:100%}
+.row:hover{background:var(--panel-2);border-color:var(--line-soft)}
+.row .nm{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:11.8px}
+.row .sz{color:var(--dim);font-size:11px;flex:0 0 auto}
+.row.dir .nm{color:var(--accent)}
+
+/* ---------- curve ---------- */
+.curve-wrap{position:relative;background:var(--panel-2)}
+canvas{display:block;width:100%;height:100%}
+.curve-tip{position:absolute;pointer-events:none;background:var(--panel-3);border:1px solid var(--line);border-radius:8px;
+  padding:5px 8px;font-family:var(--mono);font-size:11px;box-shadow:var(--shadow);opacity:0;transition:opacity .12s;white-space:nowrap;z-index:3}
+.legend{display:flex;flex-wrap:wrap;gap:6px;padding:8px 12px;border-top:1px solid var(--line-soft);align-items:center}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);
+  background:var(--panel-2);cursor:pointer;font-size:11.5px}
+.chip .sw{width:8px;height:8px;border-radius:50%}
+.chip b{font-family:var(--mono);font-weight:600}
+.chip.hid{opacity:.4;text-decoration:line-through}
+
+/* ---------- terminal ---------- */
+.term{flex:1 1 auto;font-family:var(--mono);font-size:12px;line-height:1.6;padding:8px 12px;overflow:auto;background:var(--bg-soft)}
+.tline{display:grid;grid-template-columns:max-content 30px minmax(0,1fr);gap:8px;white-space:pre-wrap;word-break:break-all}
+.tline .ts{color:var(--dim);white-space:nowrap}
+.tline .dir{font-size:10.5px;text-align:center;border-radius:5px;line-height:18px;height:18px;align-self:start;margin-top:1px}
+.tline.in .dir{color:var(--accent-2);background:rgba(53,214,178,.12)}
+.tline.out .dir{color:var(--accent);background:rgba(110,139,255,.14)}
+.tline.in .tx{color:var(--text)}
+.tline.out .tx{color:var(--muted)}
+.term-foot{display:flex;align-items:center;gap:8px;padding:9px 12px;border-top:1px solid var(--line-soft);background:var(--panel)}
+.term-foot input.inp{flex:1 1 auto;min-width:0;font-family:var(--mono)}
+.chk{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:11.5px;cursor:pointer;user-select:none}
+.chk input{accent-color:var(--accent);width:14px;height:14px}
+
+/* ---------- diagnostics ---------- */
+.diag{display:block;width:100%;text-align:left;border:1px solid var(--line-soft);border-left-width:3px;border-radius:9px;
+  background:var(--panel-2);padding:7px 10px;cursor:pointer;margin-bottom:6px;transition:.14s}
+.diag:hover{background:var(--panel-3);transform:translateX(2px)}
+.diag.err{border-left-color:var(--danger)}
+.diag.warn{border-left-color:var(--warn)}
+.diag.danger{border-left-color:#ff4d6d;background:rgba(255,77,109,.08)}
+.diag.act{outline:1px solid var(--accent);box-shadow:var(--glow)}
+.diag .top{display:flex;align-items:center;gap:8px}
+.code{font:600 10.5px/16px var(--mono);padding:0 6px;height:16px;border-radius:5px;background:var(--panel-3);color:var(--muted)}
+.diag.err .code{color:var(--danger)}
+.diag.warn .code,.diag.danger .code{color:var(--warn)}
+.diag .where{font-family:var(--mono);font-size:11.5px;color:var(--accent)}
+.diag .msg{margin-top:3px;font-size:12px}
+.diag .det{margin-top:3px;font-family:var(--mono);font-size:11px;color:var(--dim);word-break:break-all}
+.diag .paths{margin-top:6px;display:flex;gap:6px}
+.stat-row{display:flex;flex-wrap:wrap;gap:6px;padding:9px 12px;border-bottom:1px solid var(--line-soft)}
+.stat{font-family:var(--mono);font-size:11.5px;padding:3px 8px;border-radius:7px;background:var(--panel-2);border:1px solid var(--line-soft);color:var(--muted)}
+.stat.e{color:var(--danger);border-color:rgba(255,112,112,.35)}
+.stat.w{color:var(--warn);border-color:rgba(240,178,99,.35)}
+.stat.g{color:var(--ok);border-color:rgba(63,209,143,.35)}
+.pill{font-size:11px;padding:3px 9px;border-radius:999px;background:var(--panel-3);color:var(--muted);border:1px solid var(--line)}
+.pill.run{color:var(--accent);border-color:rgba(110,139,255,.4);background:rgba(110,139,255,.12)}
+.pill.ok{color:var(--ok);border-color:rgba(63,209,143,.4);background:rgba(63,209,143,.12)}
+.pill.fail{color:var(--danger);border-color:rgba(255,112,112,.4);background:rgba(255,112,112,.12)}
+.syslog{font-family:var(--mono);font-size:11.5px;line-height:1.65;padding:8px 12px;overflow:auto;background:var(--bg-soft);flex:1 1 auto}
+.syslog .l{display:grid;grid-template-columns:70px minmax(0,1fr);gap:8px;white-space:pre-wrap;word-break:break-all}
+.syslog .l>i{font-style:normal}
+.syslog .info{color:var(--muted)} .syslog .warn{color:var(--warn)} .syslog .error{color:var(--danger)}
+.syslog .danger{color:#ff4d6d;font-weight:600}
+
+/* ---------- flash overlay ---------- */
+.overlay{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:rgba(8,11,20,.62);backdrop-filter:blur(6px)}
+.overlay[hidden]{display:none}
+.flash-card{width:min(560px,92vw);background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:0 30px 70px rgba(0,0,0,.5);overflow:hidden}
+.flash-card>header{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line-soft);background:var(--panel-2)}
+.hero{padding:20px 16px 12px;text-align:center}
+.pwr{width:82px;height:82px;margin:0 auto 12px;border-radius:50%;display:grid;place-items:center;
+  border:2px solid var(--line);background:var(--panel-2);color:var(--muted);position:relative}
+.pwr svg{width:34px;height:34px}
+.pwr.beckon{border-color:var(--warn);color:var(--warn);animation:ring 1.5s ease-out infinite}
+@keyframes ring{0%{box-shadow:0 0 0 0 rgba(240,178,99,.45)}70%{box-shadow:0 0 0 22px rgba(240,178,99,0)}100%{box-shadow:0 0 0 0 rgba(240,178,99,0)}}
+.pwr.win{border-color:var(--ok);color:var(--ok);animation:none}
+.pwr.lose{border-color:var(--danger);color:var(--danger);animation:none}
+.fl-msg{font-size:15px;font-weight:600;margin-bottom:4px}
+.fl-sub{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.bar{height:7px;border-radius:99px;background:var(--panel-3);margin:14px 16px 0;overflow:hidden}
+.bar>i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width .2s}
+.fl-lines{max-height:172px;overflow:auto;margin:12px 16px;padding:9px 11px;border-radius:10px;background:var(--bg-soft);
+  font-family:var(--mono);font-size:11.5px;line-height:1.6;color:var(--muted);border:1px solid var(--line-soft)}
+.fl-reason{margin:0 16px 12px;padding:10px 12px;border-radius:10px;background:rgba(255,112,112,.09);
+  border:1px solid rgba(255,112,112,.34);font-size:12px;line-height:1.6}
+.fl-reason b{display:block;font-family:var(--mono);font-size:11px;color:var(--danger);letter-spacing:.6px}
+.flash-card>footer{display:flex;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid var(--line-soft);background:var(--panel-2)}
+.steps{display:flex;gap:6px;margin-left:auto}
+.step{font-size:11px;padding:3px 8px;border-radius:7px;background:var(--panel-3);color:var(--dim);font-family:var(--mono)}
+.step.on{color:#fff;background:var(--accent)}
+.step.done{color:var(--ok)}
+
+/* ---------- drawer ---------- */
+.drawer{position:fixed;top:var(--bar-h,62px);right:0;bottom:0;width:min(360px,94vw);z-index:40;background:var(--panel);
+  border-left:1px solid var(--line);box-shadow:-20px 0 50px rgba(0,0,0,.35);transform:translateX(100%);transition:transform .22s ease;
+  display:flex;flex-direction:column}
+.drawer.open{transform:none}
+.dhead{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:10px 12px 0}
+.dhead .dtl{font-size:13px;font-weight:600;letter-spacing:.2px}
+.dx{margin-left:auto;flex:0 0 auto;width:26px;height:26px;padding:0;display:grid;place-items:center;cursor:pointer;
+  border:1px solid transparent;border-radius:8px;background:transparent;color:var(--muted);transition:.15s}
+.dx:hover{background:var(--panel-3);border-color:var(--line);color:var(--text)}
+.dx:focus-visible{outline:none;border-color:var(--accent);box-shadow:var(--glow)}
+.dx svg{width:12px;height:12px}
+.dtabs{flex:0 0 auto;display:flex;gap:4px;padding:6px 10px 0;border-bottom:1px solid var(--line-soft)}
+.dtab{position:relative;border:0;background:transparent;color:var(--dim);font-size:12px;padding:5px 10px 7px;cursor:pointer;transition:.15s}
+.dtab:hover{color:var(--muted)}
+.dtab.on{color:var(--text);font-weight:600}
+.dtab.on::after{content:"";position:absolute;left:8px;right:8px;bottom:-1px;height:2px;border-radius:2px;background:var(--accent)}
+.dpane{display:none;flex-direction:column;flex:1 1 auto;min-height:0}
+.dpane.on{display:flex}
+.dbody{flex:1 1 auto;min-height:0;overflow:auto;padding:10px 12px}
+.dfoot{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:7px 12px;border-top:1px solid var(--line-soft);background:var(--panel-2)}
+.dfoot .hint{flex:1 1 auto;min-width:0;font-size:11px;color:var(--dim)}
+.dfoot .btn{flex:0 0 auto;padding:5px 11px;font-size:12px}
+/* 一行一件事：左槽标签、控件靠右，高度压到 30px，五项设置不滚就看完 */
+.dgroup{margin-bottom:11px}
+.dgroup>h4{display:flex;align-items:center;gap:9px;margin:0 0 6px;font-size:11px;font-weight:700;letter-spacing:.6px;color:var(--dim)}
+.dgroup>h4::after{content:"";flex:1 1 auto;height:1px;background:var(--line-soft)}
+.drow{display:flex;align-items:center;gap:10px;min-height:30px;margin-bottom:3px}
+.drow>label,.drow>.lb{flex:0 0 84px;color:var(--muted);font-size:12px}
+.drow>.ctl{flex:1 1 auto;min-width:0;display:flex;align-items:center;justify-content:flex-end;gap:8px}
+.drow select.inp{width:100%;max-width:196px;padding:5px 8px;font-size:12px;max-height:none}
+.q{flex:0 0 auto;width:19px;height:19px;padding:0;border:1px solid var(--line);border-radius:50%;background:var(--panel-2);
+  color:var(--dim);font:600 10.5px/17px var(--ui);cursor:pointer;transition:.15s}
+.q:hover{color:var(--accent);border-color:var(--accent);background:var(--panel-3)}
+/* 冷启动窗口是「多少秒」，用滑杆加实时读数比裸数字框直观 */
+.rng{-webkit-appearance:none;appearance:none;flex:1 1 auto;min-width:0;height:20px;background:transparent;cursor:pointer}
+.rng::-webkit-slider-runnable-track{height:4px;border-radius:99px;
+  background:linear-gradient(90deg,var(--accent) var(--pct,50%),var(--panel-3) var(--pct,50%))}
+.rng::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-5px;border-radius:50%;
+  background:var(--panel);border:1px solid var(--line);box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.rng:focus{outline:none}
+.rng:focus-visible::-webkit-slider-thumb{border-color:var(--accent);box-shadow:var(--glow)}
+.rv{flex:0 0 44px;text-align:right;font-family:var(--mono);font-size:12px;color:var(--text)}
+/* 只有两个值的选择用分段控件，点一下就生效，不用展开下拉 */
+.seg{display:flex;gap:2px;padding:2px;border:1px solid var(--line);border-radius:9px;background:var(--panel-2)}
+.seg button{flex:1 1 0;border:0;background:transparent;color:var(--muted);font-size:12px;padding:5px 9px;border-radius:7px;
+  cursor:pointer;white-space:nowrap;transition:.14s}
+.seg button:hover{color:var(--text)}
+.seg button.on{background:var(--panel);color:var(--text);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+:root[data-theme="dark"] .seg button.on{background:var(--panel-3)}
+/* 说明页：一段一卡，关键数字提成徽章，正文不再糊成灰墙 */
+.doc{border:1px solid var(--line-soft);border-radius:11px;background:var(--panel-2);padding:9px 11px;margin-bottom:9px;transition:.2s}
+.doc>h5{display:flex;align-items:center;gap:8px;margin:0 0 5px;font-size:12px;font-weight:600}
+.doc>p{margin:0;font-size:11.5px;line-height:1.8;color:var(--muted)}
+.doc.hl{border-color:var(--accent);box-shadow:var(--glow)}
+.num{font-family:var(--mono);font-size:11px;padding:1px 6px;border-radius:6px;background:var(--panel-3);
+  border:1px solid var(--line-soft);color:var(--accent)}
+/* 窄屏抽屉几乎盖满屏，才给一层能点掉的遮罩；宽屏不加——改主题、调布局时要看得见效果 */
+.dscrim{position:fixed;inset:0;z-index:39;background:rgba(8,11,20,.5);opacity:0;pointer-events:none;transition:opacity .2s}
+@media (max-width:640px){.drawer.open+.dscrim{opacity:1;pointer-events:auto}}
+/* 矮屏（内嵌面板只有 505px 高）再收一档：拿留白换「五项不滚就全见」 */
+@media (max-height:700px){
+  .dhead{padding:8px 12px 0}
+  .dtabs{padding:5px 10px 0}
+  .dtab{padding:4px 10px 6px}
+  .dfoot{padding:6px 12px}
+  .dfoot .hint{display:none}
+  .dbody{padding:8px 12px}
+  .dgroup{margin-bottom:8px}
+  .dgroup>h4{margin-bottom:4px}
+  .drow{min-height:28px;margin-bottom:2px}
+}
+
+
+/* ---------- toasts ---------- */
+.toasts{position:fixed;left:16px;bottom:16px;z-index:80;display:flex;flex-direction:column;gap:8px;max-width:420px}
+.toast{background:var(--panel-3);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:10px;
+  padding:9px 13px;font-size:12px;box-shadow:var(--shadow);animation:slide .2s ease}
+.toast.err{border-left-color:var(--danger)} .toast.warn{border-left-color:var(--warn)} .toast.ok{border-left-color:var(--ok)}
+@keyframes slide{from{opacity:0;transform:translateY(10px)}}
+
+@media (max-width:1280px){
+  .workspace{--w-left:270px;--w-right:320px}
+}
+@media (max-width:1080px){
+  body{overflow:auto}
+  /* 顶栏换行是拿高度换不重叠，窄屏本来就该省着花：这两枚徽章和左下「工程与产物」卡里的内容重复 */
+  #devBadge,#hexBadge{display:none}
+  .topbar{gap:6px 10px;padding:6px 12px}
+  .topbar .btn{padding:6px 10px}
+  .topbar select.inp{max-width:190px}
+  .workspace{flex:0 0 auto;height:auto;flex-direction:column}
+  /* 竖排堆叠时 flex-basis 管的是高度不是宽度，必须打回 auto */
+  #colL,#colC,#colR{flex:0 0 auto}
+  .col{min-height:auto}
+  .term,.syslog{max-height:300px}
+  /* 窄屏没有「并排」可拖：藏掉分割条，用 max-height 顶住之前存下来的内联高度 */
+  .vsplit,.hsplit{display:none}
+  #cardMeta{max-height:52vh}
+  #cardCurve,#cardSys{max-height:62vh}
+  #cardFiles{min-height:340px}
+  #cardFiles .cbody{min-height:300px}
+}
+@media (max-width:640px){
+  /* 内嵌面板这种窄宽度：顶栏先保功能再保观感。品牌只留方块，路径还在 title 里；
+     选择器放开 min-width 让它肯折行，否则一行塞不下就把按钮顶出视口 */
+  .brand>div:not(.mark){display:none}
+  .topbar select.inp{max-width:150px;min-width:0}
+  .topbar .btn{padding:5px 9px;font-size:12px}
+  .topbar{gap:5px 8px}
+}
+</style>
+<script>
+/* 默认浅色，但存档里选了暗色的要按暗色画第一帧，否则会先白闪一下 */
+try {
+  var saved = JSON.parse(localStorage.getItem('mcu.console.settings.v1') || '{}');
+  if (saved.theme) document.documentElement.setAttribute('data-theme', saved.theme === 'dark' ? 'dark' : 'light');
+} catch (e) { /* 存档读坏了无所谓，走默认浅色 */ }
+</script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="mark">51</div>
+    <div><b>在线调试台</b><small id="rootPath" title="工作区根目录">连接中…</small></div>
+  </div>
+
+  <div class="bar-group grow">
+    <select class="inp" id="projectSel" title="工作区里扫到的 Keil 工程"></select>
+    <button class="mini" id="btnRescan" title="重新扫描工程">重扫</button>
+    <span class="badge" id="devBadge" title="芯片型号与时钟">—</span>
+    <span class="badge" id="hexBadge" title="hex 产物健康度">hex 待检查</span>
+  </div>
+
+  <div class="bar-group">
+    <span class="light off" id="serialLight" title="串口占用状态"></span>
+  </div>
+
+  <div class="bar-group">
+    <button class="btn ghost" id="btnSettings" title="设置（存浏览器本地）">设置</button>
+  </div>
+</header>
+
+<main class="workspace" id="workspace">
+  <!-- ---------------- left ---------------- -->
+  <div class="col" id="colL">
+    <section class="card" id="cardMeta" style="flex:0 0 auto">
+      <div class="chead"><span class="ttl">工程与产物</span>
+        <div class="tools"><button class="mini" id="btnReloadHex">刷新</button></div></div>
+      <div class="cbody">
+        <dl class="kv" id="projMeta"></dl>
+        <div class="sub">hex 校验</div>
+        <dl class="kv" id="hexMeta"></dl>
+        <div id="hexProblems"></div>
+      </div>
+    </section>
+
+    <div class="vsplit" id="splitMeta" title="拖动调整上下比例，双击还原"></div>
+
+    <section class="card" id="cardFiles" style="flex:1 1 auto">
+      <div class="chead"><span class="ttl">文件</span>
+        <div class="tools"><button class="mini" id="btnFileUp">上级</button><button class="mini" id="btnFileHome">工程目录</button></div></div>
+      <div class="cbody flush" style="padding:8px 10px">
+        <div class="dim mono" id="fileCrumb" style="font-size:11px;margin-bottom:6px;word-break:break-all"></div>
+        <div class="list" id="fileList"></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="hsplit" id="hsplitL" title="拖动调整左栏宽度，双击还原"></div>
+
+  <!-- ---------------- center ---------------- -->
+  <div class="col" id="colC">
+    <section class="card" id="cardCurve" style="flex:0 0 auto">
+      <div class="chead"><span class="ttl">实时曲线</span>
+        <div class="tools">
+          <span class="stat" id="curveStat">等待 v: 数据</span>
+          <button class="mini" id="btnPause">暂停</button>
+          <button class="mini" id="btnCsv">导出</button>
+          <button class="mini" id="btnClearCurve">清空</button>
+        </div></div>
+      <div class="curve-wrap">
+        <canvas id="curve"></canvas>
+        <div class="curve-tip" id="curveTip"></div>
+      </div>
+      <div class="legend" id="legend"><span class="dim" style="font-size:11.5px">让板子按 <span class="mono">v: 数值</span> 或 <span class="mono">v: 1,2</span> 打印，就会自动画成多序列曲线</span></div>
+    </section>
+
+    <div class="vsplit" id="splitCurve" title="拖动调整曲线高度，双击还原"></div>
+
+    <section class="card" id="cardTerm" style="flex:1 1 auto">
+      <div class="chead"><span class="ttl">串口终端</span>
+        <div class="tools">
+          <button class="mini" id="btnHexView">HEX 视图</button>
+          <button class="mini" id="btnSaveLog">保存日志</button>
+          <button class="mini" id="btnClearTerm">清屏</button>
+          <label class="chk"><input type="checkbox" id="chkScroll" checked>自动滚动</label>
+        </div></div>
+      <div class="term" id="term"></div>
+    </section>
+  </div>
+
+  <div class="hsplit" id="hsplitR" title="拖动调整右栏宽度，双击还原"></div>
+
+  <!-- ---------------- right ---------------- -->
+  <div class="col" id="colR">
+    <section class="card" id="cardDiag" style="flex:1 1 auto">
+      <div class="chead">
+        <span class="pill" id="jobPill">空闲</span>
+        <b id="jobLabel" style="font-size:12.5px">没有作业</b>
+        <span class="muted mono" id="jobElapsed" style="margin-left:auto;font-size:11.5px"></span>
+      </div>
+      <div class="stat-row" id="buildStats"><span class="stat">等一次编译就有诊断</span></div>
+      <div class="chead" style="border-top:1px solid var(--line-soft)">
+        <button class="mini act" data-filter="all">全部</button>
+        <button class="mini" data-filter="error">错误</button>
+        <button class="mini" data-filter="warning">警告</button>
+        <button class="mini" data-filter="danger">危险</button>
+        <div class="tools"><button class="mini" id="btnClearDiag">清空</button></div>
+      </div>
+      <div class="cbody" id="diagList"></div>
+    </section>
+
+    <div class="vsplit" id="splitSys" title="拖动调整日志高度，双击还原"></div>
+
+    <section class="card" id="cardSys" style="flex:0 0 auto">
+      <div class="chead"><span class="ttl">系统日志</span>
+        <div class="tools"><button class="mini" id="btnClearSys">清空</button></div></div>
+      <div class="syslog" id="syslog"></div>
+    </section>
+  </div>
+</main>
+
+<!-- ---------------- flash overlay ---------------- -->
+<div class="overlay" id="overlay" hidden>
+  <div class="flash-card">
+    <header><b>冷启动烧写</b><span class="pill" id="flPill">准备中</span>
+      <span class="muted mono" id="flTarget" style="margin-left:auto;font-size:11.5px"></span></header>
+    <div class="hero">
+      <div class="pwr" id="flPwr">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M12 3v9"/><path d="M6.6 6.6a8 8 0 1 0 10.8 0"/></svg>
+      </div>
+      <div class="fl-msg" id="flMsg">把板子断电 3 秒，再重新上电</div>
+      <div class="fl-sub" id="flSub">窗口剩余 — s · 第 0 次尝试</div>
+    </div>
+    <div class="bar"><i id="flBar"></i></div>
+    <div class="fl-lines" id="flLines"></div>
+    <div class="fl-reason" id="flReason" hidden></div>
+    <footer>
+      <button class="btn ghost danger" id="flAbort">关闭窗口</button>
+      <div class="steps">
+        <span class="step" data-phase="handshaking">握手</span>
+        <span class="step" data-phase="loading">载入</span>
+        <span class="step" data-phase="erasing">擦除</span>
+        <span class="step" data-phase="writing">写入</span>
+        <span class="step" data-phase="options">选项</span>
+        <span class="step" data-phase="done">完成</span>
+      </div>
+    </footer>
+  </div>
+</div>
+
+<!-- ---------------- settings ---------------- -->
+<aside class="drawer" id="drawer" aria-label="设置">
+  <div class="dhead"><span class="dtl">设置</span>
+    <button class="dx" id="btnCloseDrawer" title="关闭（Esc）" aria-label="关闭设置">
+      <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+    </button></div>
+  <div class="dtabs" role="tablist">
+    <button class="dtab on" id="tabSet" role="tab">设置</button>
+    <button class="dtab" id="tabDoc" role="tab">说明</button>
+  </div>
+  <div class="dpane on" id="paneSet">
+    <div class="dbody">
+      <div class="dgroup"><h4>烧写</h4>
+        <div class="drow"><label for="stProtocol">协议</label>
+          <div class="ctl"><select class="inp" id="stProtocol"><option value="stc89">stc89（STC89/89C/90）</option><option value="stc12">stc12</option><option value="stc15">stc15</option><option value="stc8">stc8</option></select>
+            <button class="q" data-doc="docFlash" title="看说明">?</button></div></div>
+        <div class="drow"><label for="stWait">冷启动窗口</label>
+          <div class="ctl"><input class="rng" id="stWait" type="range" min="15" max="300" step="5"><span class="rv" id="stWaitV">90 秒</span></div></div>
+      </div>
+      <div class="dgroup"><h4>数据</h4>
+        <div class="drow"><label for="stWindow">曲线点数</label>
+          <div class="ctl"><select class="inp" id="stWindow"><option value="120">120</option><option value="300">300</option><option value="600">600</option><option value="1200">1200</option></select></div></div>
+        <div class="drow"><label for="stTermMax">终端行数</label>
+          <div class="ctl"><select class="inp" id="stTermMax"><option value="500">500</option><option value="1500">1500</option><option value="5000">5000</option></select></div></div>
+      </div>
+      <div class="dgroup"><h4>界面</h4>
+        <div class="drow"><span class="lb">主题</span>
+          <div class="ctl"><div class="seg" id="stTheme" role="group" aria-label="界面主题">
+            <button type="button" data-v="dark">深色石板</button><button type="button" data-v="light">浅色</button></div></div></div>
+      </div>
+    </div>
+    <div class="dfoot"><span class="hint">改动只存在本机浏览器</span>
+      <button class="btn ghost" id="btnResetLayout">重置全部布局</button></div>
+  </div>
+  <div class="dpane" id="paneDoc">
+    <div class="dbody">
+      <div class="doc" id="docFlash"><h5>烧写握手</h5>
+        <p>握手 <b class="num" id="stHs">2400</b> / 传输 <b class="num" id="stTx">9600</b> 由后端固定，跟 <span class="mono">build_flash.py</span> 一致：STC89 只认断 VCC 重上电，拉 RST 和 DTR 都没用。冷启动窗口就是留给你重新上电的秒数。</p></div>
+      <div class="doc" id="docLayout"><h5>拖拽布局</h5>
+        <p>两条竖缝改左右栏宽，栏里的横缝改卡片高度；双击任意一条还原这一处，键盘聚焦后用方向键微调（Shift 步长 40）。宽窄都记在浏览器本地，「重置全部布局」一次清掉。</p></div>
+      <div class="doc" id="docView"><h5>HEX 视图</h5>
+        <p>把收到的文本按 UTF-8 字节显示。波特率不对时芯片吐的是乱码，这里看到的字节数只作参考，判定以文本视图为准。</p></div>
+      <div class="doc" id="docNet"><h5>网络边界</h5>
+        <p>服务只绑 <span class="mono">127.0.0.1</span>，没有登录鉴权——自用工具，别放到公网或共享网络上。</p></div>
+    </div>
+  </div>
+</aside>
+<div class="dscrim" id="dscrim"></div>
+
+<div class="toasts" id="toasts"></div>
+
+<script>
+(function () {
+'use strict';
+
+/* ============================== helpers ============================== */
+var $ = function (id) { return document.getElementById(id); };
+var LS_KEY = 'mcu.console.settings.v1';
+var PALETTE = ['#6e8bff', '#35d6b2', '#f0b263', '#e879a0', '#9d7cf5', '#4ec9e0'];
+var PHASE_ORDER = ['handshaking', 'loading', 'erasing', 'writing', 'options', 'done'];
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+  });
+}
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function hex2(n) { return (n < 16 ? '0' : '') + n.toString(16).toUpperCase(); }
+
+var DEFAULTS = {
+  project: '', port: 'COM7', baud: 9600, protocol: 'stc89', wait: 90,
+  window: 300, termMax: 1500, theme: 'light', autoscroll: true, hexView: false,
+  filter: 'all', drawerTab: 'set', metaH: 0, wLeft: 0, wRight: 0, curveH: 0, sysH: 0
+};
+var S = {};
+try { S = JSON.parse(localStorage.getItem(LS_KEY) || '{}') || {}; } catch (e) { S = {}; }
+for (var k in DEFAULTS) if (!(k in S)) S[k] = DEFAULTS[k];
+function saveS() { try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch (e) {} }
+
+function api(path, opts) {
+  return fetch(path, opts).then(function (r) {
+    return r.json().catch(function () { return {}; }).then(function (j) {
+      if (!r.ok) { var e = new Error(j && j.error ? j.error : 'HTTP ' + r.status); e.code = r.status; e.body = j; throw e; }
+      return j;
+    });
+  });
+}
+function post(path, body) {
+  return api(path, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {})
+  });
+}
+
+var toastBox = $('toasts');
+function toast(msg, kind) {
+  var d = document.createElement('div');
+  d.className = 'toast ' + (kind || '');
+  d.innerHTML = msg;
+  toastBox.appendChild(d);
+  setTimeout(function () { d.style.opacity = '0'; d.style.transition = 'opacity .3s'; }, kind === 'err' ? 5200 : 3200);
+  setTimeout(function () { d.remove(); }, kind === 'err' ? 5600 : 3600);
+}
+
+function syslog(level, text, ts) {
+  var box = $('syslog');
+  var line = document.createElement('div');
+  line.className = 'l ' + level;
+  line.innerHTML = '<i class="dim">' + esc(ts || localTs()) + '</i><span>' + esc(text) + '</span>';
+  box.appendChild(line);
+  while (box.children.length > 600) box.removeChild(box.firstChild);
+  box.scrollTop = box.scrollHeight;
+}
+function localTs() {
+  var d = new Date();
+  return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+}
+function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+/* ============================== state ============================== */
+var ST = {
+  projects: [], byPath: {}, current: null, ports: [], job: null, seenJobs: {},
+  diags: [], filesDir: null, fileStack: [], flashDeadline: 0, flashTimer: null,
+  lastAttempt: 0, serialOpen: false, serialExpected: null, online: false, root: ''
+};
+
+/* ============================== SSE bus ============================== */
+var es = null, esRetry = 0, lastMsgAt = Date.now();
+function connectBus() {
+  if (es) { try { es.close(); } catch (e) {} }
+  es = new EventSource('/api/events');
+  es.onopen = function () { esRetry = 0; lastMsgAt = Date.now(); setOnline(true); };
+  es.onerror = function () {
+    setOnline(false);
+    esRetry++;
+    if (es.readyState === 2) { setTimeout(connectBus, Math.min(10000, 800 * esRetry)); }
+  };
+  es.onmessage = function (ev) {
+    lastMsgAt = Date.now();
+    var d;
+    try { d = JSON.parse(ev.data); } catch (e) { return; }
+    handle(d);
+  };
+}
+function setOnline(on) {
+  ST.online = on;
+  $('rootPath').title = on ? '后端在线（SSE 已连接）' : '后端连接断开，正在重连';
+  if (!on) syslog('warn', '与后端的推送通道断了，正在重连…');
+}
+
+/* Edge 睡眠标签页冻结渲染线程后，SSE 只会静默、不触发 onerror；
+   页面可见时 40s 无任何消息（服务端 15s 一跳）就强制重建 EventSource */
+function busWatchdog() {
+  if (document.hidden || !es || es.readyState !== 1) return;
+  if (Date.now() - lastMsgAt > 40000) {
+    lastMsgAt = Date.now();
+    syslog('warn', '推送通道静默超 40s（页面可能被浏览器冻结过），强制重连…');
+    connectBus();
+  }
+}
+setInterval(busWatchdog, 5000);
+document.addEventListener('visibilitychange', busWatchdog);
+
+function handle(ev) {
+  switch (ev.topic) {
+    case 'hello': setOnline(true); break;
+    case 'job': onJob(ev.job); break;
+    case 'log': syslog(ev.level === 'danger' ? 'danger' : ev.level, ev.text, ev.ts); break;
+    case 'build_diag': addDiag(ev, ev.ts); break;
+    case 'serial': onSerial(ev.data, ev.direction || 'in', ev.ts); break;
+    case 'curve': pushCurve(ev.values, ev.ts); break;
+    case 'serial_state': onSerialState(ev); break;
+    case 'flash_phase': onFlashPhase(ev); break;
+    case 'flash_line': onFlashLine(ev); break;
+    case 'flash_fail_reason': onFlashReason(ev); break;
+    default: break;
+  }
+}
+
+/* ============================== projects ============================== */
+function refreshProjects() {
+  return api('/api/projects').then(function (r) {
+    ST.projects = r.projects || [];
+    ST.byPath = {};
+    var sel = $('projectSel');
+    sel.innerHTML = '';
+    if (!ST.projects.length) {
+      sel.appendChild(new Option('没扫到 Keil 工程', ''));
+      syslog('warn', '在 ' + ST.root + ' 下没找到 .uvproj/.uvprojx');
+      return;
+    }
+    var groups = {};
+    ST.projects.forEach(function (p) {
+      ST.byPath[p.project] = p;
+      var g = p.top || '（根目录）';
+      (groups[g] = groups[g] || []).push(p);
+    });
+    Object.keys(groups).sort().forEach(function (g) {
+      var og = document.createElement('optgroup');
+      og.label = g;
+      groups[g].forEach(function (p) {
+        var o = new Option(p.label, p.project);
+        o.title = p.project;
+        og.appendChild(o);
+      });
+      sel.appendChild(og);
+    });
+    var want = ST.byPath[S.project] ? S.project : (r.default && ST.byPath[r.default] ? r.default : ST.projects[0].project);
+    sel.value = want;
+    setProject(want);
+  }).catch(function (e) { toast('扫描工程失败：' + esc(e.message), 'err'); });
+}
+
+function setProject(path) {
+  S.project = path; saveS();
+  ST.current = ST.byPath[path] || null;
+  renderProjMeta();
+  refreshHex();
+  goDir(null);
+}
+
+function renderProjMeta() {
+  var p = ST.current;
+  var box = $('projMeta');
+  if (!p) { box.innerHTML = '<dd class="dim">未选择工程</dd>'; $('devBadge').textContent = '—'; $('devBadge').className = 'badge'; return; }
+  var rows = [
+    ['工程', p.name],
+    ['设备', p.device || '未知'],
+    ['时钟', p.clock ? (p.clock / 1e6).toFixed(4).replace(/0+$/, '').replace(/\.$/, '') + ' MHz' : '未知'],
+    ['生成 hex', p.create_hex ? '已勾选' : '未勾选 ⚠'],
+    ['hex 路径', p.hex || '读不出'],
+    ['大小/时间', p.hex_exists ? (p.hex_bytes + ' B · ' + (p.hex_mtime_text || '')) : '文件不存在']
+  ];
+  box.innerHTML = rows.map(function (r) {
+    return '<dt>' + esc(r[0]) + '</dt><dd class="' + (r[0] === 'hex 路径' ? 'path' : '') + '" title="' + esc(r[1]) + '">' +
+      (r[0] === '生成 hex' && !p.create_hex ? '<span style="color:var(--warn)">' : '') +
+      esc(r[1]) + (r[0] === '生成 hex' && !p.create_hex ? '</span>' : '') + '</dd>';
+  }).join('');
+  if (p.error) box.innerHTML += '<dt>读取错误</dt><dd style="color:var(--danger)">' + esc(p.error) + '</dd>';
+  $('devBadge').textContent = (p.device || '?') + ' · ' + (p.clock ? (p.clock / 1e6).toFixed(2) + 'MHz' : '?');
+  $('devBadge').className = 'badge' + (p.device ? ' ok' : '');
+}
+
+function refreshHex() {
+  var p = ST.current;
+  var badge = $('hexBadge'), meta = $('hexMeta'), probs = $('hexProblems');
+  if (!p) { badge.textContent = '无工程'; badge.className = 'badge'; meta.innerHTML = ''; probs.innerHTML = ''; return; }
+  badge.textContent = 'hex 检查中…'; badge.className = 'badge';
+  api('/api/hex?project=' + encodeURIComponent(p.project)).then(function (h) {
+    if (!h || h.ok === undefined) { badge.textContent = 'hex 未知'; return; }
+    var lines = [];
+    if (h.records !== undefined) lines.push(['记录数', h.records]);
+    lines.push(['数据字节', (h.bytes || 0) + ' B']);
+    if (h.start !== undefined && h.start !== null) {
+      lines.push(['地址范围', '0x' + hex4(h.start) + ' – 0x' + hex4(h.end) + '（跨度 ' + h.span + '）']);
+      lines.push(['复位向量', h.has_reset_vector ? '已写入' : '空的 ⚠']);
+      lines.push(['入口', h.entry === null || h.entry === undefined ? '未识别（不是 LJMP 开头）' : '0x' + hex4(h.entry)]);
+    }
+    lines.push(['结束记录', h.eof ? '有' : '缺 ⚠']);
+    meta.innerHTML = lines.map(function (r) {
+      var warnish = /⚠/.test(String(r[1]));
+      return '<dt>' + esc(r[0]) + '</dt><dd' + (warnish ? ' style="color:var(--warn)"' : '') + '>' + esc(r[1]) + '</dd>';
+    }).join('');
+    var pl = h.problems || [];
+    probs.innerHTML = pl.length
+      ? '<div class="sub">问题</div><div style="color:var(--danger);font-size:12px;line-height:1.7">' +
+        pl.map(function (x) { return '· ' + esc(x); }).join('<br>') + '</div>'
+      : (h.bytes ? '<div style="color:var(--ok);font-size:12px;margin-top:8px">结构与校验和都正常</div>' : '');
+    badge.textContent = pl.length ? (h.bytes ? 'hex 有 ' + pl.length + ' 个问题' : 'hex 有问题') : 'hex 正常';
+    badge.className = 'badge ' + (pl.length ? (h.bytes ? 'warn' : 'bad') : 'ok');
+    if (pl.length && !h.bytes) toast('hex 有问题：' + esc(pl[0]), 'warn');
+  }).catch(function (e) {
+    badge.textContent = 'hex 读不了'; badge.className = 'badge bad';
+    meta.innerHTML = '<dd class="dim">' + esc(e.message) + '</dd>';
+  });
+}
+function hex4(n) { return ('000' + n.toString(16).toUpperCase()).slice(-4); }
+
+/* ============================== files ============================== */
+function goDir(dir) {
+  var p = ST.current;
+  var target = dir || (p ? dirname(p.project) : ST.root);
+  ST.filesDir = target;
+  api('/api/files?dir=' + encodeURIComponent(target)).then(function (r) {
+    $('fileCrumb').textContent = r.dir;
+    var list = $('fileList');
+    list.innerHTML = '';
+    (r.entries || []).forEach(function (en) {
+      var b = document.createElement('button');
+      b.className = 'row' + (en.type === 'dir' ? ' dir' : '');
+      b.innerHTML = '<span class="nm">' + (en.type === 'dir' ? '▸ ' : '· ') + esc(en.name) + '</span>' +
+        (en.bytes !== undefined ? '<span class="sz">' + en.bytes + ' B</span>' : '');
+      b.onclick = function () {
+        if (en.type === 'dir') { ST.fileStack.push(ST.filesDir); goDir(joinPath(ST.filesDir, en.name)); }
+        else copyPath(joinPath(ST.filesDir, en.name));
+      };
+      list.appendChild(b);
+    });
+    if (!(r.entries || []).length) list.innerHTML = '<div class="dim" style="padding:6px 8px">这个目录里没有可看的文件</div>';
+  }).catch(function (e) {
+    $('fileList').innerHTML = '<div class="dim" style="padding:6px 8px">' + esc(e.message) + '</div>';
+  });
+}
+function dirname(p) { return p.replace(/[\\/][^\\/]*$/, ''); }
+function joinPath(a, b) { return a + (/\\$/.test(a) ? '' : '\\') + b; }
+function copyPath(p) {
+  var ok = function () { toast('已复制路径：<span class="mono">' + esc(p) + '</span>', 'ok'); };
+  var nb = function () {
+    toast('浏览器不让写剪贴板，路径：<span class="mono">' + esc(p) + '</span>', 'warn');
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(p).then(ok, nb);
+  } else {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = p; document.body.appendChild(ta); ta.select();
+      var done = document.execCommand('copy');
+      ta.remove();
+      done ? ok() : nb();
+    } catch (e) { nb(); }
+  }
+}
+$('btnFileUp').onclick = function () {
+  var prev = ST.fileStack.pop();
+  if (prev) goDir(prev); else toast('已经在工程目录这一层', 'warn');
+};
+$('btnFileHome').onclick = function () { ST.fileStack = []; goDir(null); };
+
+/* ============================== 拖拽布局 ============================== */
+/* 每栏一块「吃剩余」的填充卡 + 若干块靠显式高度的卡：
+   左 meta|files(填充)、中 curve|term(填充)、右 diag(填充)|sys。 */
+var CARD_MIN = {cardMeta:118, cardFiles:210, cardCurve:150, cardTerm:170, cardDiag:150, cardSys:120};
+var SPLITS = [
+  {sp:'hsplitL', axis:'x', cssvar:'--w-left',  side:'left',  key:'wLeft',  min:196},
+  {sp:'hsplitR', axis:'x', cssvar:'--w-right', side:'right', key:'wRight', min:230},
+  {sp:'splitMeta',  axis:'y', card:'cardMeta',  key:'metaH'},
+  {sp:'splitCurve', axis:'y', card:'cardCurve', key:'curveH'},
+  // 这条缝管的是它下面那块（系统日志），往下拖是变小，所以方向要翻
+  {sp:'splitSys',   axis:'y', card:'cardSys',   key:'sysH', invert:true}
+];
+var CENTER_MIN = 320;
+
+function hidden(el) { return getComputedStyle(el).display === 'none'; }
+function splitOf(key) { for (var i = 0; i < SPLITS.length; i++) if (SPLITS[i].key === key) return SPLITS[i]; return null; }
+
+function clearSize(spec, persist) {
+  if (spec.axis === 'x') $('workspace').style.removeProperty(spec.cssvar);
+  else { var c = $(spec.card); c.style.height = ''; c.style.maxHeight = ''; }
+  if (persist) { S[spec.key] = 0; saveS(); }
+  return 0;
+}
+
+function setColW(spec, w, persist) {
+  var ws = $('workspace'), sp = $(spec.sp);
+  if (!w || hidden(sp)) return clearSize(spec, persist);
+  var wsW = ws.getBoundingClientRect().width;
+  var wL = $('colL').getBoundingClientRect().width, wC = $('colC').getBoundingClientRect().width,
+        wR = $('colR').getBoundingClientRect().width;
+  var fixed = wsW - wL - wC - wR;                      // 内边距 + 缝隙 + 两条分割条
+  var other = spec.side === 'left' ? wR : wL;
+  var lim = Math.max(spec.min, wsW - fixed - other - CENTER_MIN);
+  var px = clamp(Math.round(w), spec.min, lim);
+  ws.style.setProperty(spec.cssvar, px + 'px');
+  if (persist) { S[spec.key] = px; saveS(); }
+  return px;
+}
+
+function setCardH(spec, h, persist) {
+  var card = $(spec.card), col = card.parentNode, sp = $(spec.sp);
+  var colH = col.clientHeight;
+  // 只有并排布局才谈得上上下分割：窄屏堆叠、或列高小到来放不下时，宁可不写值
+  if (!h || hidden(sp) || colH <= 0) return clearSize(spec, persist);
+  var min = CARD_MIN[spec.card];
+  var others = sp.offsetHeight;
+  Array.prototype.forEach.call(col.children, function (el) {
+    if (el === card || el === sp || hidden(el)) return;
+    others += (el.classList.contains('vsplit') ? el.offsetHeight : (CARD_MIN[el.id] || 120));
+    others += 12;                                      // .col 的 gap
+  });
+  var lim = colH - others;
+  if (lim < min) return clearSize(spec, persist);      // 挤不下了，交回给 CSS 默认值
+  var px = clamp(Math.round(h), min, Math.max(min, lim));
+  card.style.maxHeight = 'none';                       // 拖过默认的 45% 上限时要能继续放大
+  card.style.height = px + 'px';
+  if (persist) { S[spec.key] = px; saveS(); }
+  return px;
+}
+
+function applySize(spec, v, persist) { return spec.axis === 'x' ? setColW(spec, v, persist) : setCardH(spec, v, persist); }
+function readSize(spec) {
+  return spec.axis === 'x'
+    ? $(spec.side === 'left' ? 'colL' : 'colR').getBoundingClientRect().width
+    : $(spec.card).getBoundingClientRect().height;
+}
+
+SPLITS.forEach(function (spec) {
+  var sp = $(spec.sp), sign = (spec.invert || spec.side === 'right') ? -1 : 1;
+  var v0 = 0, px = 0, py = 0;
+  sp.tabIndex = 0;
+  sp.setAttribute('role', 'separator');
+  sp.setAttribute('aria-orientation', spec.axis === 'x' ? 'vertical' : 'horizontal');
+  function move(e) {
+    var d = (spec.axis === 'x' ? e.clientX - px : e.clientY - py) * sign;
+    applySize(spec, v0 + d, false);
+  }
+  function end() {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', end);
+    window.removeEventListener('pointercancel', end);
+    document.body.classList.remove('dragging', 'dragging-x');
+    sp.classList.remove('drag');
+    applySize(spec, readSize(spec), true);
+    if (spec.axis === 'x') resizeCanvas();                 // 栏宽变了，画布要按新尺寸重画
+  }
+  sp.addEventListener('pointerdown', function (e) {
+    if (hidden(sp)) return;
+    px = e.clientX; py = e.clientY; v0 = readSize(spec);
+    sp.classList.add('drag');
+    document.body.classList.add(spec.axis === 'x' ? 'dragging-x' : 'dragging');
+    // 拖动跟到 window 上：光标只要滑出这条 9px 的缝，绑在缝上的 move 就收不到了
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    e.preventDefault();
+  });
+  sp.addEventListener('dblclick', function () { applySize(spec, 0, true); if (spec.axis === 'x') resizeCanvas(); toast('已还原默认尺寸'); });
+  sp.addEventListener('keydown', function (e) {
+    var step = (e.shiftKey ? 40 : 12) * sign;
+    if (spec.axis === 'x' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      applySize(spec, readSize(spec) + (e.key === 'ArrowLeft' ? -step : step), true); e.preventDefault();
+    } else if (spec.axis === 'y' && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      applySize(spec, readSize(spec) + (e.key === 'ArrowUp' ? -step : step), true); e.preventDefault();
+    }
+  });
+});
+
+function restoreLayout() {
+  SPLITS.forEach(function (spec) { if (S[spec.key]) applySize(spec, S[spec.key], false); });
+}
+function resetLayout() {
+  SPLITS.forEach(function (spec) { applySize(spec, 0, true); });
+  resizeCanvas();
+  toast('三栏宽度和各卡高度都回到默认', 'ok');
+}
+// 单文件前端没有测试入口，验证时得能从控制台驱动这几条分割条（浏览器里真点最难自动化）
+window.__mcu = {SPLITS: SPLITS, apply: applySize, read: readSize, S: S, save: saveS, reset: resetLayout};
+
+/* 顶栏装不下会换行，高度就不再是 62 了——设置抽屉得跟着量出来的高度让开 */
+var barEl = document.querySelector('.topbar');
+function syncBarH() { document.documentElement.style.setProperty('--bar-h', barEl.offsetHeight + 'px'); }
+new ResizeObserver(syncBarH).observe(barEl);
+// 标签页在后台时 ResizeObserver 会被节流，--bar-h 留在旧值就把抽屉顶到顶栏上面；回前台补量一次
+document.addEventListener('visibilitychange', syncBarH);
+syncBarH();
+
+/* ============================== build ============================== */
+function onJob(job) {
+  if (!job) return;
+  var prev = ST.seenJobs[job.id];
+  ST.seenJobs[job.id] = job.status;
+  ST.job = job;
+  var running = job.status === 'running';
+  var pill = $('jobPill');
+  pill.textContent = running ? '运行中' : (job.status === 'ok' ? '成功' : '失败');
+  pill.className = 'pill ' + (running ? 'run' : (job.status === 'ok' ? 'ok' : 'fail'));
+  $('jobLabel').textContent = (job.kind === 'build' ? '编译 ' : '烧写 ') + (job.label || '');
+  $('jobElapsed').textContent = job.elapsed + 's';
+  setBusy(running);
+  if (running) {
+    if (job.kind === 'flash' && $('overlay').hidden) openOverlay(portOf(), job.started);
+    return;
+  }
+  if (job.kind === 'build') renderBuildStats(job, prev === undefined);
+  if (job.kind === 'build' && prev === 'running') {
+    var t = (job.result || {}).totals || { errors: 0, warnings: 0 };
+    refreshHex();
+    toast(t.errors ? '编译失败：<span class="mono">' + t.errors + ' 个错误</span>，点右侧诊断行看位置'
+                   : '编译通过：<span class="mono">' + t.errors + ' Error, ' + t.warnings + ' Warning</span>',
+          t.errors ? 'err' : 'ok');
+  }
+  if (job.kind === 'flash' && prev === 'running') finishFlash(job);
+}
+
+function renderBuildStats(job, restored) {
+  var res = job.result || {};
+  var t = res.totals || { errors: 0, warnings: 0 };
+  if (!res.ok && !res.totals && !res.program_size) {
+    $('buildStats').innerHTML = '<span class="stat ' + (job.status === 'ok' ? 'g' : 'e') + '">' +
+      esc(job.status) + ' · ' + esc(res.error || '无诊断输出') + '</span>';
+    return;
+  }
+  var ps = res.program_size;
+  var stats = [];
+  stats.push('<span class="stat ' + (t.errors ? 'e' : 'g') + '">' + t.errors + ' Error</span>');
+  stats.push('<span class="stat ' + (t.warnings ? 'w' : '') + '">' + t.warnings + ' Warning</span>');
+  if (ps) stats.push('<span class="stat">code ' + ps.code + ' B</span>');
+  if (ps) stats.push('<span class="stat">data ' + ps.data + '.' + ps.data_bits + ' / xdata ' + ps.xdata + '</span>');
+  if (res.uv4_rc !== undefined) stats.push('<span class="stat">UV4 rc=' + res.uv4_rc + '</span>');
+  if ((res.danger_warnings || []).length) stats.push('<span class="stat e">危险警告 ' + res.danger_warnings.length + '</span>');
+  if (res.hex_missing) stats.push('<span class="stat e">没生成 hex</span>');
+  if (res.log_file) stats.push('<span class="stat" title="' + esc(res.log_file) + '">日志在 .embeddedskills/build</span>');
+  var info = res.project_info;
+  if (!res.ok && info && info.hex_exists && info.hex_mtime && job.started && info.hex_mtime < job.started) {
+    stats.push('<span class="stat w" title="' + esc(info.hex) + '">hex 没更新，现在烧进去还是上次的程序</span>');
+  }
+  $('buildStats').innerHTML = stats.join('') || '<span class="stat">没有输出</span>';
+  if (res.ok === false && !t.errors && res.error) {
+    $('buildStats').innerHTML += '<span class="stat e">' + esc(res.error) + '</span>';
+  }
+  if (restored) {
+    $('buildStats').innerHTML += '<span class="stat" title="本页打开之前跑的作业，诊断明细没有推送到这里">上次作业 · 明细未随本页推送</span>';
+  }
+}
+
+function addDiag(ev) {
+  ST.diags.push({
+    severity: ev.severity, code: ev.code, where: ev.where || '',
+    message: ev.message || '', detail: ev.detail || '',
+    danger: ev.severity === 'warning' && /^(L1|L2)$/.test(ev.code),
+    ts: ev.ts
+  });
+  renderDiags();
+}
+
+function renderDiags() {
+  var box = $('diagList');
+  var f = S.filter;
+  var items = ST.diags.filter(function (d) {
+    if (f === 'all') return true;
+    if (f === 'danger') return d.danger;
+    if (f === 'error') return d.severity === 'error';
+    if (f === 'warning') return d.severity === 'warning';
+    return true;
+  });
+  if (!items.length) {
+    box.innerHTML = '<div class="dim" style="padding:10px 4px">' +
+      (ST.diags.length ? '这个筛选条件下没有条目' : '还没有诊断信息。编译一次，错误行会出现在这里并能点开。') + '</div>';
+    return;
+  }
+  box.innerHTML = '';
+  items.forEach(function (d, i) {
+    var cls = d.danger ? 'danger' : (d.severity === 'error' ? 'err' : 'warn');
+    var b = document.createElement('button');
+    b.className = 'diag ' + cls;
+    b.innerHTML = '<div class="top"><span class="code">' + esc(d.code) + '</span>' +
+      '<span class="where">' + esc(d.where || d.severity) + '</span>' +
+      '<span class="dim mono" style="margin-left:auto;font-size:10.5px">' + esc((d.ts || '').slice(-12)) + '</span></div>' +
+      '<div class="msg">' + esc(d.message) + '</div>' +
+      (d.detail ? '<div class="det">' + esc(d.detail) + '</div>' : '') +
+      '<div class="paths"></div>';
+    b.onclick = function () {
+      Array.prototype.forEach.call(box.querySelectorAll('.diag'), function (x) { x.classList.remove('act'); });
+      b.classList.add('act');
+      var paths = b.querySelector('.paths');
+      if (paths.dataset.done) return;
+      paths.dataset.done = '1';
+      var full = resolvePath(d.where);
+      var mk = function (txt, fn) {
+        var x = document.createElement('button');
+        x.className = 'mini'; x.textContent = txt; x.onclick = fn;
+        paths.appendChild(x);
+      };
+      if (full) mk('复制完整路径', function () { copyPath(full); });
+      mk('复制这一行', function () { copyPath(d.where + '  ' + d.code + ': ' + d.message); });
+      if (full) {
+        var lab = document.createElement('span');
+        lab.className = 'dim mono'; lab.style.fontSize = '10.5px'; lab.textContent = full;
+        paths.appendChild(lab);
+      }
+    };
+    box.appendChild(b);
+  });
+}
+
+function resolvePath(where) {
+  var file = String(where || '').split(':')[0];
+  if (!file || !/[.]/.test(file)) return null;
+  var base = file.toLowerCase();
+  var p = ST.current;
+  if (p && p.sources) {
+    for (var i = 0; i < p.sources.length; i++) {
+      if (p.sources[i].toLowerCase().slice(String(p.sources[i]).lastIndexOf('\\') + 1) === base) return p.sources[i];
+    }
+  }
+  return null;
+}
+function refreshDiagFilters() {
+  Array.prototype.forEach.call(document.querySelectorAll('[data-filter]'), function (b) {
+    b.classList.toggle('act', b.dataset.filter === S.filter);
+    b.onclick = function () { S.filter = b.dataset.filter; saveS(); refreshDiagFilters(); renderDiags(); };
+  });
+}
+
+/* ============================== serial ============================== */
+var USB_PORT_RE = /ch340|usb.?serial|usb.?to.?uart|cp210|ftdi|prolific|silicon labs/i;
+
+function usbPorts() {
+  return ST.ports.filter(function (p) { return USB_PORT_RE.test((p.desc || '') + ' ' + p.device); });
+}
+
+function preferredPortsFirst() {
+  // 蓝牙 SPP 口也能"打开"，但连不到板子；把 USB 串口排在前面
+  var usb = USB_PORT_RE;
+  return ST.ports.slice().sort(function (a, b) {
+    var ua = usb.test((a.desc || '') + ' ' + a.device) ? 0 : 1;
+    var ub = usb.test((b.desc || '') + ' ' + b.device) ? 0 : 1;
+    if (ua !== ub) return ua - ub;
+    return num(a.device) - num(b.device);
+  });
+}
+function num(dev) { return parseInt(String(dev).replace(/\D+/g, ''), 10) || 0; }
+
+function pickPort() {
+  var ordered = preferredPortsFirst();
+  var usb = usbPorts();
+  var found = ordered.filter(function (p) { return p.device === S.port; })[0];
+  // 存过的端口如果是蓝牙口而板子的 USB 口又在，就别信那个旧值——它是上次连错留下的
+  if (found && (!usb.length || USB_PORT_RE.test((found.desc || '') + ' ' + found.device))) return S.port;
+  return usb.length ? usb[0].device : (ordered.length ? ordered[0].device : '');
+}
+
+function refreshPorts() {
+  return api('/api/ports').then(function (r) {
+    ST.ports = r.ports || [];
+    if (!ST.ports.length) {
+      syslog('warn', 'serial.tools.list_ports 没枚举到串口，检查 CH340 驱动 / 数据线');
+      return;
+    }
+    var want = pickPort();
+    if (want && want !== S.port) {
+      syslog('info', '板子串口定为 ' + want + (usbPorts().length ? '（优先板子的 USB 串口，跳过蓝牙 SPP 口）' : ''));
+      S.port = want;
+      saveS();
+    }
+  }).catch(function (e) { syslog('error', '枚举串口失败：' + e.message); });
+}
+
+function onSerialState(ev) {
+  ST.serialOpen = !!ev.open;
+  var l = $('serialLight');
+  l.className = 'light ' + (ev.open ? 'on' : 'off');
+  l.title = ev.open ? ('串口被监视会话占用：' + ev.port + ' @ ' + ev.baud) : '串口空闲（烧写时会自动占用再释放）';
+  if (ST.serialExpected !== null && ST.serialExpected !== ST.serialOpen) {
+    syslog('warn', '串口实际' + (ST.serialOpen ? '被打开' : '被关闭') + '了，不是本页的操作：可能被别的程序抢走、被烧写释放，或线被拔了');
+  }
+  ST.serialExpected = ST.serialOpen;
+}
+function onSerial(data, dir, ts) {
+  if (data == null) return;
+  String(data).split('\n').forEach(function (line) {
+    if (line === '') return;
+    addTerm(dir, line, ts);
+  });
+}
+function addTerm(dir, line, ts) {
+  var box = $('term');
+  var d = document.createElement('div');
+  d.className = 'tline ' + (dir === 'out' ? 'out' : 'in');
+  d.dataset.raw = line;
+  d.innerHTML = '<span class="ts">' + esc(ts || localTs()) + '</span>' +
+    '<span class="dir">' + (dir === 'out' ? 'tx' : 'rx') + '</span>' +
+    '<span class="tx">' + esc(S.hexView ? toHexView(line) : line) + '</span>';
+  box.appendChild(d);
+  while (box.children.length > S.termMax) box.removeChild(box.firstChild);
+  if (S.autoscroll) box.scrollTop = box.scrollHeight;
+}
+function toHexView(s) {
+  var bytes = new TextEncoder().encode(s), out = [];
+  for (var i = 0; i < bytes.length; i++) out.push(hex2(bytes[i]));
+  return out.join(' ');
+}
+function rerenderTerm() {
+  var box = $('term');
+  Array.prototype.forEach.call(box.children, function (d) {
+    d.querySelector('.tx').textContent = S.hexView ? toHexView(d.dataset.raw || '') : (d.dataset.raw || '');
+  });
+}
+
+/* ============================== curve ============================== */
+var cv = $('curve'), ctx = cv.getContext('2d');
+var series = [], hiddenSeries = {}, sampleCount = 0, lastPush = 0, rateEMA = 0, paused = false, cursor = null, dirty = true;
+
+function pushCurve(values, ts) {
+  if (!values || !values.length) return;
+  var t = Date.now();
+  if (lastPush) {
+    var dt = t - lastPush;
+    if (dt > 0 && dt < 5000) rateEMA = rateEMA ? rateEMA * 0.7 + (1000 / dt) * 0.3 : 1000 / dt;
+  }
+  lastPush = t;
+  while (series.length < values.length) {
+    var i = series.length;
+    series.push({ name: '序列 ' + (i + 1), color: PALETTE[i % PALETTE.length], data: [] });
+  }
+  for (var j = 0; j < series.length; j++) {
+    var s = series[j];
+    var v = j < values.length ? Number(values[j]) : null;
+    s.data.push({ t: t, v: isFinite(v) ? v : null, ts: ts || '' });
+    while (s.data.length > S.window) s.data.shift();
+  }
+  sampleCount++;
+  dirty = true;
+  updateLegend();
+}
+
+function updateLegend() {
+  var lg = $('legend');
+  if (!series.length) return;
+  var want = series.map(function (s, i) {
+    var last = null;
+    for (var k = s.data.length - 1; k >= 0; k--) { if (s.data[k].v !== null) { last = s.data[k].v; break; } }
+    return '<button class="chip' + (hiddenSeries[i] ? ' hid' : '') + '" data-s="' + i + '">' +
+      '<span class="sw" style="background:' + s.color + '"></span>' + esc(s.name) +
+      ' <b>' + (last === null ? '—' : fmtNum(last)) + '</b></button>';
+  }).join('');
+  lg.innerHTML = want + '<span class="dim" style="margin-left:auto;font-size:11px">' +
+    (rateEMA ? rateEMA.toFixed(1) + ' Hz · ' : '') + '采样 ' + sampleCount + '</span>';
+  Array.prototype.forEach.call(lg.querySelectorAll('.chip'), function (c) {
+    c.onclick = function () {
+      var i = c.dataset.s;
+      hiddenSeries[i] = !hiddenSeries[i];
+      c.classList.toggle('hid', hiddenSeries[i]);
+      dirty = true;
+    };
+  });
+}
+function fmtNum(v) {
+  if (Math.abs(v) >= 1000 || (v !== 0 && Math.abs(v) < 0.01)) return v.toPrecision(3);
+  return String(Math.round(v * 100) / 100);
+}
+
+function resizeCanvas() {
+  var r = cv.getBoundingClientRect();
+  var dpr = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * dpr));
+  cv.height = Math.max(1, Math.round(r.height * dpr));
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  dirty = true;
+}
+
+function drawCurve() {
+  if (!dirty || paused) return;
+  dirty = false;
+  var r = cv.getBoundingClientRect(), W = r.width, H = r.height;
+  ctx.clearRect(0, 0, W, H);
+  var css = getComputedStyle(document.documentElement);
+  var line = css.getPropertyValue('--line-soft').trim(), dim = css.getPropertyValue('--dim').trim();
+  var muted = css.getPropertyValue('--muted').trim();
+  var padL = 46, padR = 12, padT = 12, padB = 20;
+  var plotW = Math.max(10, W - padL - padR), plotH = Math.max(10, H - padT - padB);
+
+  var vis = series.filter(function (s, i) { return !hiddenSeries[i]; });
+  var lo = Infinity, hi = -Infinity, maxLen = 0;
+  vis.forEach(function (s) {
+    maxLen = Math.max(maxLen, s.data.length);
+    s.data.forEach(function (p) { if (p.v !== null) { if (p.v < lo) lo = p.v; if (p.v > hi) hi = p.v; } });
+  });
+  if (!isFinite(lo)) {
+    ctx.strokeStyle = line; ctx.lineWidth = 1; ctx.beginPath();
+    for (var g = 0; g < 5; g++) {
+      var yy = padT + plotH * g / 4;
+      ctx.moveTo(padL, yy); ctx.lineTo(W - padR, yy);
+    }
+    ctx.stroke();
+    ctx.fillStyle = dim; ctx.font = '12px ' + css.getPropertyValue('--mono');
+    ctx.fillText('等板子打印 v: 数值', padL + 10, padT + plotH / 2);
+    return;
+  }
+  if (hi === lo) { hi += 1; lo -= 1; }
+  var pad = (hi - lo) * 0.12; lo -= pad; hi += pad;
+
+  ctx.strokeStyle = line; ctx.lineWidth = 1; ctx.beginPath();
+  for (var k = 0; k <= 4; k++) {
+    var y = padT + plotH * k / 4;
+    ctx.moveTo(padL, y); ctx.lineTo(W - padR, y);
+  }
+  ctx.stroke();
+  ctx.fillStyle = dim; ctx.font = '10.5px ' + css.getPropertyValue('--mono');
+  for (var m = 0; m <= 4; m++) {
+    var val = hi - (hi - lo) * m / 4, ypos = padT + plotH * m / 4;
+    ctx.fillText(fmtNum(val), 6, ypos + 3.5);
+  }
+
+  var n = Math.max(maxLen, 2);
+  var X = function (i) { return padL + plotW * i / (n - 1); };
+  var Y = function (v) { return padT + plotH * (1 - (v - lo) / (hi - lo)); };
+
+  vis.forEach(function (s) {
+    var off = n - s.data.length;
+    ctx.beginPath(); ctx.lineWidth = 1.6; ctx.strokeStyle = s.color; ctx.lineJoin = 'round';
+    var started = false, min = Infinity, max = -Infinity, sum = 0, cnt = 0;
+    s.data.forEach(function (p, i) {
+      if (p.v === null) { started = false; return; }
+      var x = X(off + i), y = Y(p.v);
+      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+      if (p.v < min) min = p.v; if (p.v > max) max = p.v; sum += p.v; cnt++;
+    });
+    ctx.stroke();
+    if (vis.length === 1 && cnt) {
+      ctx.lineTo(X(off + s.data.length - 1), padT + plotH); ctx.lineTo(X(off), padT + plotH); ctx.closePath();
+      ctx.fillStyle = s.color + '22'; ctx.fill();
+    }
+    s._stat = cnt ? { min: min, max: max, avg: sum / cnt } : null;
+  });
+
+  if (cursor !== null && cursor < n) {
+    var cx = padL + plotW * clamp(cursor, 0, n - 1);
+    ctx.strokeStyle = muted; ctx.setLineDash([3, 3]); ctx.beginPath();
+    ctx.moveTo(cx, padT); ctx.lineTo(cx, padT + plotH); ctx.stroke(); ctx.setLineDash([]);
+    var readout = [];
+    vis.forEach(function (s) {
+      var o = n - s.data.length;
+      var p = s.data[cursor - o];
+      readout.push(p && p.v !== null ? fmtNum(p.v) : '—');
+    });
+    $('curveStat').textContent = '游标 ' + cursor + ' · ' + readout.join(' / ');
+  } else {
+    var st = vis.filter(function (s) { return s._stat; });
+    $('curveStat').textContent = st.length
+      ? st.map(function (s, i) { return s._stat.min + ' ~ ' + s._stat.max + (st.length > 1 ? '' : ' / 均值 ' + (Math.round(s._stat.avg * 100) / 100)); }).join(' | ')
+      : '等待 v: 数据';
+  }
+}
+
+cv.addEventListener('mousemove', function (e) {
+  var r = cv.getBoundingClientRect();
+  var padL = 46, padR = 12, plotW = Math.max(10, r.width - padL - padR);
+  var maxLen = 0;
+  series.forEach(function (s, i) { if (!hiddenSeries[i]) maxLen = Math.max(maxLen, s.data.length); });
+  var n = Math.max(maxLen, 2);
+  var i = Math.round((e.clientX - r.left - padL) / plotW * (n - 1));
+  if (i < 0 || i >= n) { cursor = null; $('curveTip').style.opacity = 0; dirty = true; return; }
+  cursor = i;
+  var lines = [], off = n - 0;
+  series.forEach(function (s, si) {
+    if (hiddenSeries[si]) return;
+    var o = n - s.data.length, p = s.data[i - o];
+    if (p) lines.push('<span style="color:' + s.color + '">●</span> ' + esc(s.name) + ' = ' + fmtNum(p.v) + ' <span class="dim">' + esc(p.ts || '') + '</span>');
+  });
+  var tip = $('curveTip');
+  if (lines.length) {
+    tip.innerHTML = lines.join('<br>');
+    tip.style.opacity = 1;
+    tip.style.left = clamp(e.clientX - r.left + 12, 8, r.width - 180) + 'px';
+    tip.style.top = clamp(e.clientY - r.top - 8, 8, r.height - 40) + 'px';
+  } else tip.style.opacity = 0;
+  dirty = true;
+});
+cv.addEventListener('mouseleave', function () { cursor = null; $('curveTip').style.opacity = 0; dirty = true; });
+
+$('btnPause').onclick = function () {
+  paused = !paused;
+  this.textContent = paused ? '继续' : '暂停';
+  this.classList.toggle('act', paused);
+  if (!paused) dirty = true;
+  toast(paused ? '曲线画面已冻结（数据继续缓存）' : '曲线继续刷新');
+};
+$('btnClearCurve').onclick = function () {
+  series.forEach(function (s) { s.data = []; });
+  sampleCount = 0; rateEMA = 0; dirty = true;
+  $('curveStat').textContent = '已清空';
+};
+$('btnCsv').onclick = function () {
+  if (!series.length) { toast('还没有曲线数据', 'warn'); return; }
+  var head = ['t_ms'].concat(series.map(function (s) { return s.name; })).join(',');
+  var maxLen = 0; series.forEach(function (s) { maxLen = Math.max(maxLen, s.data.length); });
+  var rows = [head];
+  var t0 = series[0].data.length ? series[0].data[0].t : 0;
+  for (var i = 0; i < maxLen; i++) {
+    var cells = [];
+    series.forEach(function (s) {
+      var o = maxLen - s.data.length;
+      var p = s.data[i - o];
+      cells.push(p ? (p.v === null ? '' : p.v) : '');
+    });
+    rows.push((i === 0 ? t0 : '') + ',' + cells.join(','));
+  }
+  download('曲线_' + stampName() + '.csv', rows.join('\n'));
+};
+function stampName() {
+  var d = new Date();
+  return d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) + '_' + pad2(d.getHours()) + pad2(d.getMinutes()) + pad2(d.getSeconds());
+}
+function download(name, text) {
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + text], { type: 'text/plain;charset=utf-8' }));
+  a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  toast('已导出 <span class="mono">' + esc(name) + '</span>', 'ok');
+}
+$('btnSaveLog').onclick = function () {
+  var box = $('term');
+  if (!box.children.length) { toast('终端是空的，没什么可存', 'warn'); return; }
+  var lines = [];
+  Array.prototype.forEach.call(box.children, function (d) {
+    var ts = d.querySelector('.ts').textContent, dir = d.querySelector('.dir').textContent;
+    lines.push(ts + ' ' + (dir === 'tx' ? '>> ' : '<< ') + (d.dataset.raw || ''));
+  });
+  download('串口_' + stampName() + '.log', lines.join('\n'));
+};
+$('btnClearTerm').onclick = function () { $('term').innerHTML = ''; };
+$('btnHexView').onclick = function () {
+  S.hexView = !S.hexView; saveS();
+  this.classList.toggle('act', S.hexView);
+  rerenderTerm();
+};
+$('chkScroll').onchange = function () { S.autoscroll = this.checked; saveS(); };
+
+function portOf() { return S.port || 'COM7'; }
+
+function openOverlay(port, startedAt) {
+  // 别的标签页/刷新后接手正在跑的烧写：用 started 推出的窗口终点，别让倒计时从 90s 重来
+  var wait = Number(S.wait) || 90;
+  var endAt = startedAt ? (startedAt * 1000 + wait * 1000) : (Date.now() + wait * 1000);
+  ST.flashDeadline = endAt;
+  $('overlay').hidden = false;
+  $('flLines').innerHTML = '';
+  $('flReason').hidden = true;
+  $('flBar').style.width = '0%';
+  $('flTarget').textContent = (ST.current ? String(ST.current.hex).split(/[\\/]/).pop() : '?') + ' → ' + port;
+  $('flPill').textContent = '等待断电'; $('flPill').className = 'pill run';
+  setPhase(null, 0);
+  if (ST.flashTimer) clearInterval(ST.flashTimer);
+  ST.flashTimer = setInterval(function () {
+    var left = Math.max(0, Math.round((ST.flashDeadline - Date.now()) / 1000));
+    $('flSub').textContent = '窗口剩余 ' + left + ' s · 第 ' + (ST.lastAttempt || 0) + ' 次尝试' +
+      (left === 0 ? '（窗口已到，脚本停止等待）' : '');
+    if (left === 0) { clearInterval(ST.flashTimer); ST.flashTimer = null; }
+  }, 200);
+}
+function closeOverlay() {
+  $('overlay').hidden = true;
+  if (ST.flashTimer) { clearInterval(ST.flashTimer); ST.flashTimer = null; }
+}
+$('flAbort').onclick = function () {
+  closeOverlay();
+  toast('遮罩已关闭；后端仍在等握手窗口，要真停它请点顶栏「停止」');
+};
+
+function onFlashPhase(ev) {
+  if ($('overlay').hidden) openOverlay(portOf());
+  $('flMsg').textContent = ev.text || '';
+  ST.lastAttempt = ev.attempt || ST.lastAttempt || 0;
+  $('flPwr').className = 'pwr ' + (ev.phase === 'done' ? 'win' : (ev.phase === 'failed' ? 'lose' : 'beckon'));
+  $('flPill').textContent = ({
+    waiting_power: '等待断电', handshaking: '握手探测', done: '烧写成功', failed: '超时未握手'
+  })[ev.phase] || ev.phase;
+  $('flPill').className = 'pill ' + (ev.phase === 'done' ? 'ok' : (ev.phase === 'failed' ? 'fail' : 'run'));
+  if (ev.pct) $('flBar').style.width = clamp(ev.pct, 0, 100) + '%';
+  setPhase(ev.phase, ev.attempt);
+  if (ev.phase === 'done') {
+    $('flBar').style.width = '100%';
+    syslog('info', '烧写成功（第 ' + ev.attempt + ' 次尝试）：' + ev.text);
+    setTimeout(closeOverlay, 6000);
+  } else if (ev.phase === 'failed') {
+    syslog('error', '烧写失败：' + ev.text);
+  } else {
+    syslog('info', ev.text);
+  }
+}
+function setPhase(cur, attempt) {
+  if (cur === 'failed') return;      // 超时时保留最后走到的那一步，别把进度抹平
+  var idx = PHASE_ORDER.indexOf(cur === 'waiting_power' ? null : cur);
+  Array.prototype.forEach.call(document.querySelectorAll('.step'), function (s, i) {
+    s.classList.remove('on', 'done');
+    if (idx < 0) return;
+    if (i < idx) s.classList.add('done');
+    if (i === idx) s.classList.add('on');
+  });
+  if (attempt) ST.lastAttempt = attempt;
+}
+function onFlashLine(ev) {
+  var box = $('flLines');
+  var d = document.createElement('div');
+  d.textContent = ev.text;
+  if (ev.phase) d.style.color = 'var(--text)';
+  if (/error|not responding|Could not open/i.test(ev.text)) d.style.color = 'var(--danger)';
+  box.appendChild(d);
+  while (box.children.length > 120) box.removeChild(box.firstChild);
+  box.scrollTop = box.scrollHeight;
+  if (ev.pct !== null && ev.pct !== undefined) $('flBar').style.width = clamp(ev.pct, 0, 100) + '%';
+  if (ev.phase) setPhase(ev.phase, ST.lastAttempt);
+}
+function onFlashReason(ev) {
+  var box = $('flReason');
+  box.hidden = false;
+  box.innerHTML = '<b>' + esc(ev.cause) + ' · 第 ' + esc(ev.attempt) + ' 次</b>' + esc(ev.hint);
+  syslog('warn', '失败原因 [' + ev.cause + '] ' + ev.hint);
+}
+function finishFlash(job) {
+  if (ST.flashTimer) { clearInterval(ST.flashTimer); ST.flashTimer = null; }
+  var r = job.result || {};
+  if (job.status === 'ok') {
+    $('flMsg').textContent = '烧写成功：再断电重上电一次，芯片才会跑新程序';
+    $('flPill').textContent = '成功'; $('flPill').className = 'pill ok';
+    $('flPwr').className = 'pwr win';
+    $('flBar').style.width = '100%';
+    toast('烧写成功（第 ' + (r.attempts || '?') + ' 次尝试）—— 断电重上电才会跑', 'ok');
+    setTimeout(closeOverlay, 8000);
+  } else {
+    if (r.attempts) $('flSub').textContent = '共尝试 ' + r.attempts + ' 次，没抓到冷启动窗口';
+    if (r.error === 'hex_missing') $('flMsg').textContent = 'hex 不存在，先编译一次';
+    if (r.error === 'no_handshake') $('flMsg').textContent = '窗口内没等到冷启动，再断一次电';
+    toast('烧写没成功：' + esc(r.error || '未知原因') + '，遮罩里有逐条提示', 'err');
+  }
+  refreshState();
+}
+
+/* ============================== top-level actions ============================== */
+function setBusy(b) {
+  $('serialLight').className = 'light ' + (b ? 'busy' : (ST.serialOpen ? 'on' : 'off'));
+}
+$('btnRescan').onclick = function () { refreshProjects().then(function () { toast('工程列表已刷新', 'ok'); }); };
+$('projectSel').onchange = function () { ST.fileStack = []; setProject(this.value); };
+$('btnReloadHex').onclick = refreshHex;
+$('btnClearDiag').onclick = function () { ST.diags = []; renderDiags(); };
+$('btnClearSys').onclick = function () { $('syslog').innerHTML = ''; };
+
+/* drawer */
+function openDrawer(o) {
+  var d = $('drawer');
+  d.classList.toggle('open', !!o);
+  // 后台标签页里 ResizeObserver 被节流，--bar-h 可能还是旧值；开抽屉当场量一次，别让抽屉压住顶栏
+  if (o) { syncBarH(); applyTab(); }
+}
+$('btnSettings').onclick = function () { openDrawer(!$('drawer').classList.contains('open')); };
+$('btnResetLayout').onclick = resetLayout;
+$('btnCloseDrawer').onclick = function () { openDrawer(false); };
+$('dscrim').onclick = function () { openDrawer(false); };
+function applyTab() {
+  var doc = S.drawerTab === 'doc';
+  $('tabSet').classList.toggle('on', !doc);
+  $('tabDoc').classList.toggle('on', doc);
+  $('paneSet').classList.toggle('on', !doc);
+  $('paneDoc').classList.toggle('on', doc);
+}
+function showTab(which) { S.drawerTab = which; saveS(); applyTab(); }
+$('tabSet').onclick = function () { showTab('set'); };
+$('tabDoc').onclick = function () { showTab('doc'); };
+/* 说明收进页签后，坑位提示得留一条回去的路：行尾的 ? 跳到那一节并高亮一下 */
+Array.prototype.forEach.call(document.querySelectorAll('.q'), function (b) {
+  b.onclick = function () {
+    showTab('doc');
+    var d = $(b.getAttribute('data-doc'));
+    if (!d) return;
+    d.classList.add('hl');
+    d.scrollIntoView(false);
+    setTimeout(function () { d.classList.remove('hl'); }, 1800);
+  };
+});
+function bindField(id, key, cast) {
+  $(id).onchange = function () {
+    S[key] = cast(this.value); saveS();
+    toast('已保存：' + key + ' = ' + esc(String(S[key])), 'ok');
+  };
+}
+bindField('stProtocol', 'protocol', String);
+bindField('stWindow', 'window', function (v) { return parseInt(v, 10); });
+bindField('stTermMax', 'termMax', function (v) { return parseInt(v, 10); });
+/* 冷启动窗口：拖动只动读数，松手才落库，免得一路刷 toast */
+function syncWait() {
+  var el = $('stWait'), v = clamp(parseInt(el.value, 10) || 90, 15, 300);
+  $('stWaitV').textContent = v + ' 秒';
+  el.style.setProperty('--pct', ((v - 15) / 285 * 100) + '%');
+  return v;
+}
+$('stWait').oninput = syncWait;
+$('stWait').onchange = function () {
+  S.wait = syncWait(); saveS();
+  toast('已保存：wait = ' + S.wait + ' 秒', 'ok');
+};
+/* 只有两个值的主题用分段，点一下当场生效，不用展开下拉再猜长什么样 */
+function syncThemeSeg() {
+  Array.prototype.forEach.call($('stTheme').children, function (b) {
+    b.classList.toggle('on', b.getAttribute('data-v') === S.theme);
+  });
+}
+$('stTheme').onclick = function (e) {
+  var b = e.target.closest ? e.target.closest('button') : null;
+  if (!b || b.getAttribute('data-v') === S.theme) return;
+  S.theme = b.getAttribute('data-v'); saveS(); applyTheme(); syncThemeSeg();
+  toast('已保存：theme = ' + esc(S.theme), 'ok');
+};
+function applyTheme() {
+  document.documentElement.setAttribute('data-theme', S.theme === 'light' ? 'light' : 'dark');
+  dirty = true;
+}
+
+document.addEventListener('keydown', function (e) {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+    if (e.key === 'Escape') e.target.blur();
+    return;
+  }
+  if (e.key === 'Escape') { closeOverlay(); openDrawer(false); }
+});
+$('overlay').addEventListener('click', function (e) { if (e.target === this) closeOverlay(); });
+
+/* ============================== state bootstrap ============================== */
+function refreshState() {
+  return api('/api/state').then(function (st) {
+    ST.root = st.root;
+    ST.serialOpen = !!(st.serial && st.serial.open);
+    $('rootPath').textContent = st.root;
+    onSerialState({ open: ST.serialOpen, port: st.serial && st.serial.port, baud: st.serial && st.serial.baud });
+    $('stHs').textContent = st.handshake_baud;
+    $('stTx').textContent = st.transfer_baud;
+    var missing = [];
+    if (!st.uv4) missing.push('没找到 UV4.exe');
+    if (!st.stcgal_ok) missing.push('没装 stcgal');
+    if (!st.serial_ok) missing.push('没装 pyserial');
+    if (missing.length) { syslog('error', missing.join(' / ')); toast(esc(missing[0]) + '，部分功能不可用', 'err'); }
+    if (st.running) { setBusy(true); onJob(st.running); }
+    else setBusy(false);
+  }).catch(function (e) {
+    syslog('error', '读后端状态失败：' + e.message);
+    setOnline(false);
+  });
+}
+
+function syncDrawerFields() {
+  $('stProtocol').value = S.protocol;
+  $('stWait').value = String(S.wait);
+  syncWait();
+  $('stWindow').value = String(S.window);
+  $('stTermMax').value = String(S.termMax);
+  syncThemeSeg();
+  applyTab();
+  $('chkScroll').checked = !!S.autoscroll;
+  $('btnHexView').classList.toggle('act', !!S.hexView);
+}
+
+function init() {
+  applyTheme();
+  syncDrawerFields();
+  refreshDiagFilters();
+  renderDiags();
+  restoreLayout();
+  resizeCanvas();
+  window.addEventListener('resize', function () {
+    resizeCanvas();
+    // 窗口变小后，存过的尺寸可能已经挤不下：按当前尺寸重新夹一遍
+    restoreLayout();
+  });
+  (function loop() { drawCurve(); requestAnimationFrame(loop); })();
+  connectBus();
+  refreshState().then(function () {
+    return refreshPorts();
+  }).then(function () {
+    return refreshProjects();
+  }).then(function () {
+    syslog('info', '调试台就绪（纯展示）：编译/烧写/串口作业由 Qoder agent 经 API 下发');
+  }).catch(function (e) { syslog('error', '初始化失败：' + e.message); });
+  setInterval(function () { api('/api/job').then(function (r) { if (r.job) onJob(r.job); }).catch(function () {}); }, 4000);
+}
+init();
+})();
+</script>
+</body>
+</html>

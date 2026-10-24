@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.embeddedskills/
+Listings/
+*.uvgui.*
+*.bak
+Objects/*.obj
